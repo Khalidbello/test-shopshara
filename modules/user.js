@@ -1,33 +1,40 @@
 import { Router } from "express";
 import createClient from "./mongodb.js";
 import { ObjectId } from "mongodb";
+import { deletePost, editPost, logout } from "./helper_functions.js";
 
 const router = new Router();
 
 
-// route corsigning users out 
+// middle ware for user router
+
+router.use((req, res, next)=> {
+  if (req.session.email && req.session.type === "user") {
+     next();
+  } else {
+    res.status(401);
+    return res.json({
+      status: "unAuthorised",
+      message: "user not logged in"
+    });
+  };
+});
+
+
+// route for signing users out 
+
 router.post('/logout', (req, res) => {
   // Destroy the session
-  req.session.destroy((err) => {
-    if (err) {
-      console.log('Error destroying session:', err);
-      res.status(502);
-      res.json({
-        status: "serverError",
-        message: "failed to logout",
-      });
-    } else {
-      // Redirect the user to a logged-out page or login page
-      res.redirect('/');
-    }
-  });
-});
+  logout(req, res);
+}); // end of logout endpoint
+
+
 
 // create post route
 router.post("/create-post", async (req, res) => {
   try {
     console.log("req body", req.body);
-    const { title, content } = req.body;
+    let { title, content } = req.body;
     const dateCreated = new Date();
 
     if (!title || !content) {
@@ -36,22 +43,26 @@ router.post("/create-post", async (req, res) => {
         stataus: "bad request",
         message: "some parameters to create a post are missing"
       });
-    }
+    };
 
+    title = title.trim();
+    content = content.trim();
+    
     // addimg post to database
     const client = createClient();
     client.connect();
     const collection = client.db(process.env.DB_NAME).collection(process.env.POST_COLL);
-
+    
     // each post will be identified by a cretor id 
     // which is the id of the user who created it 
-    const newPost = await collection.insertOne({ title, content, dateCreated, creatorId: req.session._id });
+    const newPost = await collection.insertOne({ title, content, dateCreated, creator: req.session.email, comments: [] });
 
     res.json({
       status: 'successful',
       message: 'post created succesfully',
       postId: newPost.insertedId
     });
+    client.close();
   } catch (err) {
     console.log("error in creating post", err);
     res.status(500);
@@ -60,111 +71,73 @@ router.post("/create-post", async (req, res) => {
       message: "error creating post"
     });
   };
-});
+}); // end of create post endpoint
 
 
 
 // routes to edit post
 
 router.put("/edit-post/:postId", async (req, res) => {
+  editPost(req, res);
+}); // end of edit post enxpoint
+
+
+// routes for commenting
+router.post("/comment/:postId", async (req, res) => {
   try {
     const postId = new ObjectId(req.params.postId);
-    const { title, content } = req.body;
-    const dateEdited = new Date();
-    console.log("in edit post", postId, title, content);
+    let comment = req.body.comment;
+    const dateCommented = new Date();
+    console.log("in edit post", postId, comment);
 
-    if (!title || !content || !postId) {
+    if (!comment || !postId) {
       res.status(400);
       return res.json({
         stataus: "bad request",
         message: "some parameters to edit post are missing"
       });
-    }
+    };
 
-    // addimg post to database
+    comment = comment.trim();
+    // adding comment
     const client = createClient();
     await client.connect();
     const collection = client.db(process.env.DB_NAME).collection(process.env.POST_COLL);
 
     const data = await collection.findOne({ _id: postId });
-    console.log("to update data", data);
-
+    console.log("post to comment", data);
+    
     if (!data) {
+      client.close();
       res.status(404);
-      return res.json({status: "error", message: "post not found"});
-    }
-
-    if (req.session._id !== data.creatorId) {
-      res.status(401);
-      return res.json({
-        status: "unAthorised",
-        message: "you do not have authority to edit this post"
-      });
+      return res.json({ status: "error", message: "post not found" });
     };
 
-    const editedPost = await collection.updateOne({_id: postId}, {$set: { title, content, dateEdited}});
-    res.json({ status: "successful", message: "post edited succesfully" });
+    const newComment = {comment: comment, dateCommented, user: req.session.email};
+    const commented = await collection.updateOne({_id: postId}, {$push: {
+      comments: newComment
+    }});
+    console.log("new commemt", commented);
+    
+    res.json({
+      status: "successful",
+      message: "commented added successfully"
+    });
+    client.close();
   } catch (err) {
-    console.log("error in creating post", err);
+    console.log("error in commenting", err)
     res.status(500);
     res.json({
-      status: "error",
-      message: "error creating post"
+      status: "server error",
+      message: "something went wrong"
     });
   };
-});
-
+}); // end of comment end point
 
 
 // route to delete post
 router.delete("/delete-post/:postId", async (req, res) => {
-  try {
-    const postId = new ObjectId(req.params.postId);
-    console.log("post id in deleted", postId);
-    if (!postId) {
-      res.status(400);
-      return res.json({
-        stataus: "bad request",
-        message: "some id of post to delete is missing missing"
-      });
-    };
-
-    // addimg post to database
-    const client = createClient();
-    await client.connect();
-    const collection = client.db(process.env.DB_NAME).collection(process.env.POST_COLL);
-    // await collection.drop(); return res.send("deleted");
-    
-    const data = await collection.findOne({_id: postId });
-    console.log("to delete data", data);
-    
-    if (!data) {
-      res.status(404);
-      return res.json({status: "error", message: "post not found"});
-    };
-    
-    if (req.session._id !== data.creatorId) {
-      res.status(401);
-      return res.json({
-        status: "unAthorised",
-        message: "you do not have authority to delete this post"
-      });
-    };
-
-    const deleted = await collection.deleteOne({ _id: postId });
-    console.log("post deletd", deleted);
-    
-    res.json({
-      status: "successful",
-      message: "post deleted succesfully"
-    });
-  } catch (err) {
-    console.log("error in deleteing post", err);
-    res.json({
-      status: "error",
-      message: "an error occured",
-    });
-  };
+  deletePost(req, res);
 });
 
 

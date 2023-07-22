@@ -3,8 +3,7 @@ import session from 'express-session';
 import signingRouter from "./modules/signings.js";
 import userRouter from './modules/user.js';
 import adminRouter from './modules/admin.js';
-import visitorRouter from './modules/visitor.js';
-
+import { sendVisitorResponse } from './modules/helper_functions.js';
 
 const app = express();
 
@@ -22,31 +21,16 @@ app.use(session({
 }));
 
 
-// middle ware for admin amd user
-function checkIfLoggedIn (req, res, next) {
-  if (req.session.email && req.session.id) {
-     next();
-  } else {
-    res.status(401);
-    return res.json({
-      status: "unAuthorised",
-      message: "user not logged in"
-    });
-  };
-}
-
-app.use("/user", checkIfLoggedIn);
-app.use("/admin", checkIfLoggedIn);
-
-
 
 app.get('/', (req, res) => {
-  if (req.session.email && req.session._id) {
-    if (req.session.admin === true) return res.send('shop share test blog web app accessed as admin');
+  if (req.session.email) {
+    if (req.session.type === "admin") return res.send('shop share test blog web app accessed as admin');
     return res.send('shop share test blog web app accessed as user')
-  }
-  res.send('shop share test blog web app accessed as visitor')
+  };
+  //res.send('shop share test blog web app accessed as visitor')
+  sendVisitorResponse(req, res);
 });
+
 
 // locking in routes as middlewares
 app.use("/", signingRouter);

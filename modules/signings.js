@@ -1,4 +1,5 @@
 import { Router } from "express";
+import emailValidator from "email-validator";
 import createClient from "./mongodb.js";
 
 
@@ -8,15 +9,42 @@ const router = new Router();
 // sign up route
 router.post("/sign-up", async (req, res) => {
   try {
-    const { email, password } = req.body;
+    let { email, password } = req.body;
     console.log(email, password);
 
+    if (!email || !password) {
+      res.status(402);
+      return res.json({
+        status: "bad request",
+        message: "email or password missing"
+      });
+    };
+
+    email = email.trim();
+    password = password.trim();
+    
+    if (!emailValidator.validate(email)) {
+      res.status(402);
+      return res.json({
+        status: "bad request",
+        message: "invalid email recieved"
+      });
+    };
+
+    if (password.length < 5) {
+      res.status(402);
+      return res.json({
+        status: "bad request",
+        message: "password must be longer than six characters"
+      });
+    }
+    
     const client = createClient();
     await client.connect();
     const users = client.db(process.env.DB_NAME).collection(process.env.USERS_COLL);
 
     // check if account with email alredy exists
-    const user = await users.findOne({ email });
+    const user = await users.findOne({ email});
     console.log("user in sigin", user);
 
     if (user) {
@@ -30,7 +58,6 @@ router.post("/sign-up", async (req, res) => {
     console.log("account created", response);
 
     req.session.email = email;
-    req.session._id = response.insertedId;
     res.redirect("/");
   } catch (err) {
     console.log("error in signup api", err);
@@ -48,7 +75,18 @@ router.post("/sign-up", async (req, res) => {
 
 router.post("/sign-in", async (req, res) => {
   try {
-    const { email, password } = req.body;
+    let { email, password } = req.body;
+
+    if (!email || !password) {
+      res.status(402);
+      return res.json({
+        status: "bad request",
+        message: "email or password missing"
+      });
+    };
+
+    email = email.trim();
+    password = password.trim();
     const client = createClient();
     await client.connect();
     const users = client.db(process.env.DB_NAME).collection(process.env.USERS_COLL);
@@ -73,7 +111,8 @@ router.post("/sign-in", async (req, res) => {
 
     // setting session
     req.session.email = email;
-    req.session._id = user._id;
+    req.session.type = "user";
+  
     res.redirect("/");
   } catch (err) {
   };
@@ -81,42 +120,44 @@ router.post("/sign-in", async (req, res) => {
 
 
 // admin sign in route
-router.post("admin-sign-in", async (req, res) => {
+router.post("/admin-sign-in", async (req, res) => {
   try {
-  const {email, password} = req.body;
+    let { email, password } = req.body;
 
-  if (!email || !password) {
-    res.status(401);
-    return resjson({
-      status: "bad request",
-      message: "some form datas are missing"
-    });
-  };
-    
-  const client = createClient();
-  client.connect();
-  const collection = client.db(process.env.DB_NAME).collection(process.env.ADMIN_COLL);
-  const admin = await collection.findOne({email});
-    
-  if (!admin) {
-    res.status(404);
-    return res.json({
-      status: "not found",
-      message: "Admin with email not found"
-    });
-  };
+    if (!email || !password) {
+      res.status(401);
+      return resjson({
+        status: "bad request",
+        message: "some form datas are missing"
+      });
+    };
+
+    email = email.trim();
+    password = password.trim();
+    const client = createClient();
+    client.connect();
+    const collection = client.db(process.env.DB_NAME).collection(process.env.ADMIN_COLL);
+    const admin = await collection.findOne({ email });
+
+    if (!admin) {
+      res.status(404);
+      return res.json({
+        status: "not found",
+        message: "Admin with email not found"
+      });
+    };
     if (admin.password !== password) {
-    res.status(400);
-    return res.json({
-      status: "bad request",
-      message: "wrong password provided"
-    });
-  };
+      res.status(400);
+      return res.json({
+        status: "bad request",
+        message: "wrong password provided"
+      });
+    };
 
-  req.session.admin = true;
-  req.session.email = admin.email;
-  req.session._id = admin._id;
-  res.redirect("/");
+    req.session.type = "admin";
+    req.session.email = admin.email;
+
+    res.redirect("/");
   } catch (err) {
     comsole.log("error in admin sign in", err);
     res.status(500);
