@@ -42,6 +42,7 @@ app.use("/admin", checkIfLoggedIn);
 
 app.get('/', (req, res) => {
   if (req.session.email && req.session._id) {
+    if (req.session.admin === true) return res.send('shop share test blog web app accessed as admin');
     return res.send('shop share test blog web app accessed as user')
   }
   res.send('shop share test blog web app accessed as visitor')

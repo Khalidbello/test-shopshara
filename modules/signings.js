@@ -79,4 +79,52 @@ router.post("/sign-in", async (req, res) => {
   };
 });
 
+
+// admin sign in route
+router.post("admin-sign-in", async (req, res) => {
+  try {
+  const {email, password} = req.body;
+
+  if (!email || !password) {
+    res.status(401);
+    return resjson({
+      status: "bad request",
+      message: "some form datas are missing"
+    });
+  };
+    
+  const client = createClient();
+  client.connect();
+  const collection = client.db(process.env.DB_NAME).collection(process.env.ADMIN_COLL);
+  const admin = await collection.findOne({email});
+    
+  if (!admin) {
+    res.status(404);
+    return res.json({
+      status: "not found",
+      message: "Admin with email not found"
+    });
+  };
+    if (admin.password !== password) {
+    res.status(400);
+    return res.json({
+      status: "bad request",
+      message: "wrong password provided"
+    });
+  };
+
+  req.session.admin = true;
+  req.session.email = admin.email;
+  req.session._id = admin._id;
+  res.redirect("/");
+  } catch (err) {
+    comsole.log("error in admin sign in", err);
+    res.status(500);
+    res.json({
+      status: "error",
+      message: "something went wrong"
+    });
+  };
+});
+
 export default router;

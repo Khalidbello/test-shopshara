@@ -71,8 +71,9 @@ router.put("/edit-post/:postId", async (req, res) => {
     const postId = new ObjectId(req.params.postId);
     const { title, content } = req.body;
     const dateEdited = new Date();
+    console.log("in edit post", postId, title, content);
 
-    if (!title || !content) {
+    if (!title || !content || !postId) {
       res.status(400);
       return res.json({
         stataus: "bad request",
@@ -85,8 +86,8 @@ router.put("/edit-post/:postId", async (req, res) => {
     await client.connect();
     const collection = client.db(process.env.DB_NAME).collection(process.env.POST_COLL);
 
-    const data = await collection.findOne({ _id: postId }, { creatorId: 1 });
-    console.log("to updata data", data);
+    const data = await collection.findOne({ _id: postId });
+    console.log("to update data", data);
 
     if (!data) {
       res.status(404);
@@ -97,11 +98,11 @@ router.put("/edit-post/:postId", async (req, res) => {
       res.status(401);
       return res.json({
         status: "unAthorised",
-        message: "you do not have authority to delete this post"
+        message: "you do not have authority to edit this post"
       });
     };
 
-    await collection.updateOne({ title, post, dateEdited })
+    const editedPost = await collection.updateOne({_id: postId}, {$set: { title, content, dateEdited}});
     res.json({ status: "successful", message: "post edited succesfully" });
   } catch (err) {
     console.log("error in creating post", err);
